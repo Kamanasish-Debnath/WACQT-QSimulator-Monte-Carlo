@@ -660,7 +660,6 @@ def pulse_hamiltonians(gate, TC, angle, npoints, measurement = False):
     return  FHam, tlist     
 
 
-
 def Execute(Hamiltonian, c_ops, Info, Ini, ntraj = 5):
     
     '''
@@ -752,11 +751,7 @@ def calculate_fidelity(states, Estate):
     Fidelity = np.mean(Fidelity)
     return Fidelity
 
-
-
-
-
-    
+  
     
 def Measurement(Hamiltonian, c_ops, Ini, Info, CM, coeff):
     '''
