@@ -660,64 +660,56 @@ def pulse_hamiltonians(gate, TC, angle, npoints, measurement = False):
     return  FHam, tlist     
 
 
-def Execute(Hamiltonian, c_ops, Info, Ini, ntraj = 5):
+def Execute(Hamiltonian, c_ops, Info, Ini):
     
     '''
-    This function executes the quantum circuit using WFMC and returns all the states.
+    This function executes the quantum circuit using WFMC and returns the states for a single trajectory.
     
     Arguments- 
     Hamiltonian   : Bare Hamiltonian of the system
     C_ops         : List of collapse operators
     Info          : The class gate which includes the types of gate, target, control, angle etc
     Ini           : The initial state
-    ntraj         : Number of trajectories
     
     Returns-
     FState        : An array of final states
     
     '''   
-   
-    
-    Fstate_copy = Ini
-    Fstate = []
-    for trajectories in tqdm_notebook(range(ntraj)):
-           
+             
             
-        Ini = Fstate_copy
-        for i in range(len(Info)):
+    for i in range(len(Info)):
 
-            # Get the QobjEvo for each time dependent Hamiltonians
-            npoints = 5000
-            gate =  np.array(Info[i].name)
-            TC   =  np.array(Info[i].Tar_Con)
-            angle = np.array(Info[i].angle)
+        # Get the QobjEvo for each time dependent Hamiltonians
+        npoints = 5000
+        gate =  np.array(Info[i].name)
+        TC   =  np.array(Info[i].Tar_Con)
+        angle = np.array(Info[i].angle)
 
-            H1, tlist = pulse_hamiltonians(gate, TC, angle, npoints)
-            H2 = sum(H1) + Hamiltonian
-            final_dm = mcsolve(H2, Ini, tlist, c_ops, e_ops = [], options = Options(store_final_state=True, \
-                                                                                    atol= 1e-10, rtol=1e-10), \
-                                                                                     progress_bar=False, ntraj = 1)
-            dm = final_dm.states[0][-1]
-            if 'HD' in gate:
-                index_HD = np.where(gate == 'HD')[0]
-                for k, index in enumerate(index_HD):
-                    final_dm = virtual_Z_gate(dm, np.pi, TC[index])
-                    dm = final_dm
+        H1, tlist = pulse_hamiltonians(gate, TC, angle, npoints)
+        H2 = sum(H1) + Hamiltonian
+        final_dm = mcsolve(H2, Ini, tlist, c_ops, e_ops = [], options = Options(store_final_state=True, \
+                                                                                atol= 1e-10, rtol=1e-10), \
+                                                                                 progress_bar=False, ntraj = 1)
+        dm = final_dm.states[0][-1]
+        if 'HD' in gate:
+            index_HD = np.where(gate == 'HD')[0]
+            for k, index in enumerate(index_HD):
+                final_dm = virtual_Z_gate(dm, np.pi, TC[index])
+                dm = final_dm
 
 
-            if 'PZ' in gate:
-                index_PZ = np.where(gate == 'PZ')[0]
-                for k, index in enumerate(index_PZ):
-                    final_dm = virtual_Z_gate(dm, angle[index], TC[index])
-                    dm = final_dm
-                    
-            Ini = dm
+        if 'PZ' in gate:
+            index_PZ = np.where(gate == 'PZ')[0]
+            for k, index in enumerate(index_PZ):
+                final_dm = virtual_Z_gate(dm, angle[index], TC[index])
+                dm = final_dm
 
-    
-        Fstate.append(Ini)   
+        Ini = dm
+
+
    
     #Returns Fstate which contains an array of final states        
-    return Fstate
+    return Ini
 
     
     
