@@ -36,6 +36,7 @@ from qutip.qip.circuit import Gate
 from qutip.qip.circuit import QubitCircuit, Gate
 from qutip import tensor, basis
 import itertools as it
+from tqdm.notebook import tqdm_notebook
 import time
 sqrt = np.sqrt
 pi   = np.pi
@@ -472,19 +473,6 @@ def virtual_Z_gate(Istate, angle, target):
     
 
 
-
-def Final_state(dm, oper):
-    '''
-    This function applies an operator to a density matrix and returns the final density matrix.
-    Useful for density matrices when multiple convertion between operators and vectors are required.
-    '''
-    final_dm= operator_to_vector(dm)
-    final_dm = oper*final_state
-    final_dm = vector_to_operator(final_state)
-    return final_dm
-
-
-
 def pulse_hamiltonians(gate, TC, angle, npoints, measurement = False):
     
     '''
@@ -673,55 +661,101 @@ def pulse_hamiltonians(gate, TC, angle, npoints, measurement = False):
 
 
 
-def Execute(Hamiltonian, c_ops, Info, Ini):
+def Execute(Hamiltonian, c_ops, Info, Ini, ntraj = 5):
+    
     '''
-    This function executes the quantum circuit and returns the final state.
+    This function executes the quantum circuit using WFMC and returns all the states.
     
     Arguments- 
     Hamiltonian   : Bare Hamiltonian of the system
     C_ops         : List of collapse operators
     Info          : The class gate which includes the types of gate, target, control, angle etc
     Ini           : The initial state
+    ntraj         : Number of trajectories
     
     Returns-
-    FState        : The final state
+    FState        : An array of final states
+    
+    '''   
+   
+    
+    Fstate_copy = Ini
+    Fstate = []
+    for trajectories in tqdm_notebook(range(ntraj)):
+           
+            
+        Ini = Fstate_copy
+        for i in range(len(Info)):
+
+            # Get the QobjEvo for each time dependent Hamiltonians
+            npoints = 5000
+            gate =  np.array(Info[i].name)
+            TC   =  np.array(Info[i].Tar_Con)
+            angle = np.array(Info[i].angle)
+
+            H1, tlist = pulse_hamiltonians(gate, TC, angle, npoints)
+            H2 = sum(H1) + Hamiltonian
+            final_dm = mcsolve(H2, Ini, tlist, c_ops, e_ops = [], options = Options(store_final_state=True, \
+                                                                                    atol= 1e-10, rtol=1e-10), \
+                                                                                     progress_bar=False, ntraj = 1)
+            dm = final_dm.states[0][-1]
+            if 'HD' in gate:
+                index_HD = np.where(gate == 'HD')[0]
+                for k, index in enumerate(index_HD):
+                    final_dm = virtual_Z_gate(dm, np.pi, TC[index])
+                    dm = final_dm
+
+
+            if 'PZ' in gate:
+                index_PZ = np.where(gate == 'PZ')[0]
+                for k, index in enumerate(index_PZ):
+                    final_dm = virtual_Z_gate(dm, angle[index], TC[index])
+                    dm = final_dm
+                    
+            Ini = dm
+
+    
+        Fstate.append(Ini)   
+   
+    #Returns Fstate which contains an array of final states        
+    return Fstate
+
+    
+    
+    
+def calculate_fidelity(states, Estate):
+    
+    '''
+    This function calculates the fidelity (average) given a list of final states
+    and the expected final state
+    
+    Arguments
+    --------------------
+    states        :       An array of states from monte carlo trajectories
+    Estate        :       Expected (noisefree) final state
+    
+    
+     Returns
+    --------------------
+    Fidelity      :       Fidelity computed from all the final states and averaged.
     
     '''
     
-    Tsteps = []
-    for i in range(len(Info)):
-        
-        # Get the QobjEvo for each time dependent Hamiltonians
-        npoints = 5000
-        gate =  np.array(Info[i].name)
-        TC   =  np.array(Info[i].Tar_Con)
-        angle = np.array(Info[i].angle)
-        
-        H1, tlist = pulse_hamiltonians(gate, TC, angle, npoints)
-        H2 = sum(H1) + Hamiltonian
-
-        final_dm = mesolve(H2, Ini, tlist, c_ops, e_ops = [], options = Options(store_final_state=True, \
-                                                                                atol= 1e-10, rtol=1e-10))
-        dm = final_dm.final_state
-        if 'HD' in gate:
-            index_HD = np.where(gate == 'HD')[0]
-            for k, index in enumerate(index_HD):
-                final_dm = virtual_Z_gate(dm, np.pi, TC[index])
-                dm = final_dm
-            
-        
-        if 'PZ' in gate:
-            index_PZ = np.where(gate == 'PZ')[0]
-            for k, index in enumerate(index_PZ):
-                final_dm = virtual_Z_gate(dm, angle[index], TC[index])
-                dm = final_dm
-            
-        
-        Ini = dm            
-    return Ini
-
     
-    
+    # First calculate the number of trajectories used for the calculations
+    ntraj = len(states)
+    Fidelity = []
+    for i in range(ntraj):
+        Rho = ket2dm(states[i])
+        Fidelity.append(fidelity(Rho, ket2dm(Estate))**2)
+        
+    Fidelity = np.mean(Fidelity)
+    return Fidelity
+
+
+
+
+
     
     
 def Measurement(Hamiltonian, c_ops, Ini, Info, CM, coeff):
@@ -848,76 +882,7 @@ def final_pop(probs, gate):
     return sum 
        
     
-def Time_dynamics(Hamiltonian, c_ops, Info, Ini, e_ops = []):
-    '''
-    This function is used when the time dynamics during the quantum algorithm is needed.
-    If e_ops is not supplied the function returns the density function at different time steps.
-    
-    
-    Arguments-
-    
-    Hamiltonian      :     Bare hamiltonian of the system
-    c_ops            :     Collapse operators
-    Info             :     The class gate which includes the types of gate, target, control, angle etc.
-    Ini              :     Initial state of the system (ket or density matrix)
-    e_ops            :     Operators whose expectation values are desired.
-    
-    Returns-
-    
-    expect           :      Expectation values of the operators supplied
-    states           :      If e_ops = [], then it returns the density matrices at different times.
-    tlist            :      Time points correspond to the states.
-    
-    '''
-    
-    
-    
-    Tsteps = []
-    states = []
-    for i in range(len(Info)):
-        
-        npoints = 2000
-        gate =  np.array(Info[i].name)
-        TC   =  np.array(Info[i].Tar_Con)
-        angle = np.array(Info[i].angle)
-        H1, tlist = pulse_hamiltonians(gate, TC, angle, npoints)
-        
-        H2 = sum(H1) + Hamiltonian
-            
-        final_dm = mesolve(H2, Ini, tlist, c_ops, e_ops = [], options = Options(store_final_state=True))
-        dm = final_dm.final_state
-        
-        if 'HD' in gate:
-            index_HD = np.where(gate == 'HD')[0]
-            for k, index in enumerate(index_HD):
-                final_dm = virtual_Z_gate(dm, np.pi, TC[index])
-                dm = final_dm
-            
-        
-        if 'PZ' in gate:
-            index_PZ = np.where(gate == 'PZ')[0]
-            for k, index in enumerate(index_PZ):
-                final_dm = virtual_Z_gate(dm, angle[index], TC[index])
-                dm = final_dm
-            
-        
-        Ini = dm       
-        Tsteps.append(tlist)
-        states.append(dm)
-        
-        
-    # Tsteps and states has the appended time steps and states. 
-    # These has to be merged into a list.  
-        
-        
-    # THIS FUNCTION IS UNDER CONSTRUCTION !!!
-    
 
-                       
-        
-    
-    
-    
     
     
     
