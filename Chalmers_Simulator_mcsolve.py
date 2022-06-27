@@ -870,7 +870,8 @@ def final_pop(probs, gate):
        
     
 
-    
+
+# The following function needs testing !!!
 def Evalues(e_ops, states):
     '''
     This function calculates the average values of operators from all the
