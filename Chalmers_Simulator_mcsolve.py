@@ -871,8 +871,33 @@ def final_pop(probs, gate):
     
 
     
+def Evalues(e_ops, states):
+    '''
+    This function calculates the average values of operators from all the
+    final states calculated from the trajectory approach.
+    
+    Arguments
+    --------------------
+    e_ops         :       List of operators
+    states        :       A list of final states
     
     
+     Returns
+    --------------------
+    Epect_values  :       A list of expectation values corresponding to the
+                          trajectories for each operators in e_ops
+    
+    
+    '''
+    
+    
+    Epect_values = []
+    for i in e_ops:
+        expt = []
+        for j in range(len(states)):
+            expt.append(expect(i, states[j]))
+        Epect_values.append(np.mean(expt))
+    return Epect_values
     
     
     
